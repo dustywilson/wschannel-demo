@@ -3,6 +3,7 @@ package main
 import (
 	"bitbucket.org/dustywilson/wschannel"
 	"encoding/json"
+	"fmt"
 	"github.com/dchest/uniuri"
 	"net/http"
 	"time"
@@ -20,12 +21,26 @@ func main() {
 }
 
 func run() {
-	fred, _ := ws.NewSession("fredflintstone")
-	t := time.Tick(time.Millisecond * 500)
+	t := time.Tick(time.Second * 5)
 	i := 0
 	for {
 		i++
-		fred.C <- time.Now()
+		for _, sessionId := range ws.GetSessions() {
+			ss := ws.GetSession(sessionId)
+
+			// send message via the session's send method:
+			ss.Send(time.Now())
+
+			// send message via the session's channel:
+			ss.C <- fmt.Sprintf("Hello session [%s].\n", ss.Id())
+
+			for _, connectionId := range ss.GetConnections() {
+				cn := ss.GetConnection(connectionId)
+
+				// send a message directly to a connection instead of a whole session:
+				cn.C <- fmt.Sprintf("Hello connection [%s].\n", cn.Id())
+			}
+		}
 		<-t
 	}
 }
