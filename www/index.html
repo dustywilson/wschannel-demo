@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test One</title>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+    <style>
+        *, *:before, *:after {
+            -moz-box-sizing: border-box;
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #log {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<textarea id="log"></textarea>
+<script>
+    var sessionId;
+    var connectionId = Math.floor(Math.random() * 9007199254740992).toString(36);
+    var ws;
+    var reconnectIntervalId;
+    var reconnectInterval = 0;
+    var pingIntervalId;
+    function log(line) {
+        console.log(line);
+        var logBox = $("#log");
+        logBox.append(line + "\n");
+        logBox.scrollTop(logBox[0].scrollHeight - logBox.height());
+    }
+    function connect() {
+        clearTimeout(reconnectIntervalId);
+        clearInterval(pingIntervalId);
+        reconnectInterval = reconnectInterval + (Math.random() * reconnectInterval * 0.5); // FIXME: find a good algorithm for this?
+        log("Connecting to WS with SessionID[" + sessionId + "] ConnectionID[" + connectionId + "]");
+        ws = new WebSocket("ws://localhost:5555/ws/" + sessionId + "/" + connectionId);
+        ws.onmessage = function (data) {
+            log("messaged: " + data.data);
+            var msg = JSON.parse(data.data);
+            if (msg.error !== undefined && msg.error.length > 0) {
+                log("Error: " + msg.error);
+            }
+            if (msg.serverMessage !== undefined) {
+                if (msg.setting == "defaultReconnectDelay") {
+                    reconnectInterval = msg.value / 1000000;
+                }
+                if (msg.setting == "connection") {
+                    if (msg.value == "new") {
+                        // FIXME: do any init or cleanup based on the fact that this is not a resumed connection
+                        log("This connection is new and the existing state may need to be cleared instead of relying on likely-inaccurate data.  Page refresh?");
+                    } else if (msg.value == "resumed") {
+                        // FIXME: do we need to care that this was simply a resume state?  we're probably good as-is...
+                        log("This connection resumed from its connection failure.");
+                    }
+                }
+                if (msg.disconnect) {
+                    if (msg.retryDelay > 0) {
+                        clearInterval(reconnectIntervalId);
+                        reconnectInterval = msg.retryDelay / 1000000;
+                    } else if (msg.retryDelay < 0) {
+                        clearInterval(reconnectIntervalId);
+                        reconnectInterval = -1;
+                    }
+                    ws.close();
+                }
+            }
+        }
+        ws.onclose = function () {
+            clearTimeout(reconnectIntervalId);
+            clearInterval(pingIntervalId);
+            log("closed");
+            if (reconnectInterval > 0) {
+                if (reconnectInterval < 500) {
+                    reconnectInterval = 5000;
+                }
+                log("Reconnecting in: " + (reconnectInterval / 1000) + " seconds.");
+                reconnectIntervalId = setTimeout(connect, reconnectInterval);
+            } else {
+                log("Not going to automatically reconnect.");
+            }
+        }
+        ws.onopen = function () {
+            clearTimeout(reconnectIntervalId);
+            clearInterval(pingIntervalId);
+            log("opened");
+            pingIntervalId = setInterval(ping, 1250);
+        }
+    }
+    function getSessionId() {
+        $.get("/api/session", function (data) {
+            log("sessionResponse: " + data);
+            var msg = JSON.parse(data);
+            sessionId = msg.sessionId;
+            if (sessionId !== undefined && sessionId.length > 0) {
+                connect();
+            } else {
+                log("No sessionId, no connection.");
+            }
+        });
+    }
+    getSessionId();
+
+    function ping() {
+        $.post("/api/ping", {"sessionId": sessionId, "message": "Hello, to my own session from connection [" + connectionId + "].", "random": Math.floor(Math.random() * 9007199254740992).toString(36)});
+    }
+</script>
+</body>
+</html>
