@@ -20,25 +20,28 @@ func main() {
 	panic(http.ListenAndServe(":5555", nil))
 }
 
+type GenericMessage struct {
+	Title   string      `json:"title,omitempty"`
+	Message interface{} `json:"message,omitempty"`
+}
+
 func run() {
 	t := time.Tick(time.Second * 5)
-	i := 0
 	for {
-		i++
 		for _, sessionId := range ws.GetSessions() {
 			ss := ws.GetSession(sessionId)
 
 			// send message via the session's send method:
-			ss.Send(time.Now())
+			ss.Send(GenericMessage{"time", time.Now()})
 
 			// send message via the session's channel:
-			ss.C <- fmt.Sprintf("Hello session [%s].\n", ss.Id())
+			ss.C <- GenericMessage{"sessionsGreetings", fmt.Sprintf("Hello session [%s].", ss.Id())}
 
 			for _, connectionId := range ss.GetConnections() {
 				cn := ss.GetConnection(connectionId)
 
 				// send a message directly to a connection instead of a whole session:
-				cn.C <- fmt.Sprintf("Hello connection [%s].\n", cn.Id())
+				cn.C <- GenericMessage{"helloConnection", fmt.Sprintf("Hello connection [%s].", cn.Id())}
 			}
 		}
 		<-t
