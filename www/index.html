@@ -55,6 +55,13 @@
                 if (msg.setting == "defaultReconnectDelay") {
                     reconnectInterval = msg.value / 1000000;
                 }
+
+                if (msg.error !== undefined && msg.error == "Session Invalid") {
+                    clearTimeout(reconnectIntervalId);
+                    getSessionId();
+                    return;
+                }
+
                 if (msg.setting == "connection") {
                     if (msg.value == "new") {
                         // FIXME: do any init or cleanup based on the fact that this is not a resumed connection
@@ -66,10 +73,10 @@
                 }
                 if (msg.disconnect) {
                     if (msg.retryDelay > 0) {
-                        clearInterval(reconnectIntervalId);
+                        clearTimeout(reconnectIntervalId);
                         reconnectInterval = msg.retryDelay / 1000000;
                     } else if (msg.retryDelay < 0) {
-                        clearInterval(reconnectIntervalId);
+                        clearTimeout(reconnectIntervalId);
                         reconnectInterval = -1;
                     }
                     ws.close();
@@ -97,6 +104,7 @@
             pingIntervalId = setInterval(ping, 1250);
         }
     }
+
     function getSessionId() {
         $.get("/api/session", function (data) {
             log("sessionResponse: " + data);
